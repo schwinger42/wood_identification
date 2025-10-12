@@ -1,0 +1,567 @@
+import os
+import re
+import shutil
+from pathlib import Path
+from collections import defaultdict
+import polars as pl
+import pandas as pd
+
+
+def complete_dataset_organization():
+    """
+    Complete pipeline to transform raw dataset into organized structure
+    Steps:
+    1. Reorganize files with standardized naming
+    2. Fix filename conventions
+    3. Remove third column from all files
+    4. Generate metadata
+    """
+
+    print("🚀 Starting complete dataset organization...")
+
+    # Step 1: Reorganize raw dataset
+    print("\n📁 Step 1: Reorganizing raw dataset structure...")
+    reorganize_raman_dataset()
+
+    # Step 2: Fix filename conventions
+    print("\n🔧 Step 2: Fixing filename conventions...")
+    fix_filename_convention()
+
+    # Step 3: Clean data files (remove third column)
+    print("\n🧹 Step 3: Cleaning data files...")
+    clean_organized_dataset()
+
+    # Step 4: Generate final metadata
+    print("\n📊 Step 4: Generating metadata...")
+    metadata_df = generate_metadata_file()
+
+    # Step 5: Final verification
+    print("\n✅ Step 5: Final verification...")
+    verify_organization()
+
+    print("\n🎉 Complete dataset organization finished!")
+    return metadata_df
+
+
+def reorganize_raman_dataset():
+    """
+    Reorganize Raman dataset with correct hierarchical understanding
+    Structure: Species → Tree → Cube → Facet → Point
+    """
+
+    # Define paths
+    raw_path = Path("../dataset/raw/")
+    organized_path = Path("../dataset/organized/")
+
+    # Clear existing organized directory
+    if organized_path.exists():
+        shutil.rmtree(organized_path)
+        print("  🗑️  Cleared existing organized directory")
+
+    # Create organized directory structure
+    organized_path.mkdir(parents=True, exist_ok=True)
+    (organized_path / "train").mkdir(parents=True, exist_ok=True)
+    (organized_path / "test").mkdir(parents=True, exist_ok=True)
+
+    # Species name mapping for consistency
+    species_mapping = {
+        "Acacia confusa": "Acacia_Confusa",
+        "Acacia mangium": "Acacia_Mangium",
+        "Machilus kusanoi": "Machilus_Kusanoi",
+        "Swietenia mahagoni": "Swietenia_Mahagoni",
+        "Swietenia marophylla": "Swietenia_Marophylla",
+        "Chamaecyparis formosensis": "Chamaecyparis_Formosensis",
+        "Chamaecyparis obtusa var. formosana": "Chamaecyparis_Obtusa_var_Formosana",
+        "Chamaecyparis obyusa": "Chamaecyparis_Obyusa",
+        "Fokienia hodginsii": "Fokienia_Hodginsii"
+    }
+
+    # Process each species directory
+    for species_dir in raw_path.iterdir():
+        if not species_dir.is_dir() or species_dir.name.endswith('.md'):
+            continue
+
+        species_name = species_dir.name
+        standardized_species = species_mapping.get(species_name, species_name.replace(' ', '_'))
+
+        print(f"  📂 Processing {species_name}...")
+
+        # Handle special case: Swietenia marophylla with test directory
+        if species_name == "Swietenia marophylla":
+            process_swietenia_marophylla(species_dir, organized_path, standardized_species)
+        elif species_name == "Chamaecyparis obtusa var. formosana":
+            process_chamaecyparis_obtusa_var_formosana(species_dir, organized_path, standardized_species)
+        else:
+            process_regular_species_corrected(species_dir, organized_path, standardized_species)
+
+
+def process_regular_species_corrected(species_dir, organized_path, standardized_species):
+    """Process regular species with correct tree-cube understanding"""
+
+    # Group files by actual tree (not cube)
+    tree_groups = defaultdict(lambda: defaultdict(list))  # tree_id -> cube_id -> files
+
+    for file_path in species_dir.glob("*.txt"):
+        try:
+            file_info = extract_file_info_corrected(file_path.name)
+            tree_id = file_info['tree_id']
+            cube_id = file_info['cube_id']
+            tree_groups[tree_id][cube_id].append(file_path)
+        except Exception as e:
+            print(f"    ⚠️ Error processing file {file_path.name}: {e}")
+            continue
+
+    # Split by trees first, then by cubes within trees
+    all_tree_ids = sorted(tree_groups.keys())
+
+    # Create directories
+    train_dir = organized_path / "train" / standardized_species
+    test_dir = organized_path / "test" / standardized_species
+    train_dir.mkdir(parents=True, exist_ok=True)
+    test_dir.mkdir(parents=True, exist_ok=True)
+
+    for tree_id in all_tree_ids:
+        cubes = sorted(tree_groups[tree_id].keys())
+        n_cubes = len(cubes)
+
+        # Split cubes 80/20 (at least 1 cube for test if multiple cubes exist)
+        if n_cubes > 1:
+            n_test_cubes = max(1, n_cubes // 5)
+            test_cubes = cubes[-n_test_cubes:]
+            train_cubes = cubes[:-n_test_cubes]
+        else:
+            # If only one cube, put it in training
+            train_cubes = cubes
+            test_cubes = []
+
+        # Process training cubes
+        for cube_id in train_cubes:
+            for file_path in tree_groups[tree_id][cube_id]:
+                new_filename = standardize_filename_corrected(
+                    file_path.name, standardized_species, tree_id, cube_id
+                )
+                shutil.copy2(file_path, train_dir / new_filename)
+
+        # Process test cubes
+        for cube_id in test_cubes:
+            for file_path in tree_groups[tree_id][cube_id]:
+                new_filename = standardize_filename_corrected(
+                    file_path.name, standardized_species, tree_id, cube_id
+                )
+                shutil.copy2(file_path, test_dir / new_filename)
+
+
+def extract_file_info_corrected(filename):
+    """Extract correct file information understanding different filename patterns"""
+
+    if filename.startswith("24mW-"):
+        # Handle 24mW files - two possible patterns
+        energy = "24mW"
+        parts = filename.replace("24mW-", "").split("-")
+
+        # Check if parts[3] is a facet (letter) or cube_id (number)
+        if parts[3] in ['C', 'R', 'T']:
+            # Pattern: 24mW-20250926-Swietenia mahagoni-2-R-8.txt
+            # Format: Energy-Date-Species-TreeID-Facet-Point (no cube number)
+            tree_id = int(parts[2])  # Tree ID
+            cube_id = 1  # Default cube_id = 1 when not specified
+            facet = parts[3]
+            point = parts[4].split('.')[0]
+        else:
+            # Pattern: 24mW-20250926-Swietenia marcrophylla-2-3-T-8.txt
+            # Format: Energy-Date-Species-TreeID-CubeID-Facet-Point
+            tree_id = int(parts[2])  # Tree ID
+            cube_id = int(parts[3])  # Cube ID within tree
+            facet = parts[4]
+            point = parts[5].split('.')[0]
+
+        return {
+            'tree_id': tree_id, 'cube_id': cube_id,
+            'facet': facet, 'point': point, 'energy': energy
+        }
+    else:
+        # Two possible patterns for 100mW files:
+        energy = "100mW"
+        parts = filename.split("-")
+
+        # Check if parts[3] is a facet (letter) or cube_id (number)
+        if parts[3] in ['C', 'R', 'T']:
+            # Pattern: 20250922-Chamaecyparis obyusa-1-C-1.txt
+            # Format: Date-Species-TreeID-Facet-Point (no cube number)
+            tree_id = int(parts[2])  # Tree ID
+            cube_id = 1  # Default cube_id = 1 when not specified
+            facet = parts[3]
+            point = parts[4].split('.')[0]
+        else:
+            # Pattern: 20250923-Acacia confusa-1-C-1.txt
+            # Format: Date-Species-CubeID-Facet-Point (tree_id = 1)
+            tree_id = 1  # Default tree_id = 1 for Acacia pattern
+            cube_id = int(parts[2])  # Cube ID
+            facet = parts[3]
+            point = parts[4].split('.')[0]
+
+        return {
+            'tree_id': tree_id, 'cube_id': cube_id,
+            'facet': facet, 'point': point, 'energy': energy
+        }
+
+
+def standardize_filename_corrected(original_filename, species_name, tree_id, cube_id):
+    """Create standardized filename with correct tree-cube structure"""
+
+    file_info = extract_file_info_corrected(original_filename)
+    energy = file_info['energy']
+
+    # Extract date from original filename
+    if original_filename.startswith("24mW-"):
+        date = original_filename.replace("24mW-", "").split("-")[0]
+    else:
+        date = original_filename.split("-")[0]
+
+    # Construct: {Energy}mW-{Date}-{Species}-{TreeID}-{CubeID}-{Facet}-{Point}.txt
+    standardized = f"{energy}-{date}-{species_name}-{tree_id}-{cube_id}-{file_info['facet']}-{file_info['point']}.txt"
+
+    return standardized
+
+
+def process_swietenia_marophylla(species_dir, organized_path, standardized_species):
+    """Handle Swietenia marophylla with separate test directory"""
+
+    # Process main directory (Tree 1) -> Train set
+    train_dir = organized_path / "train" / standardized_species
+    train_dir.mkdir(parents=True ,exist_ok=True)
+
+    for file_path in species_dir.glob("*.txt"):
+        try:
+            file_info = extract_file_info_corrected(file_path.name)
+            new_filename = standardize_filename_corrected(
+                file_path.name, standardized_species, 1, file_info['cube_id']
+            )
+            shutil.copy2(file_path, train_dir / new_filename)
+        except Exception as e:
+            print(f"    ⚠️ Error processing Swietenia file {file_path.name}: {e}")
+
+    # Process test directory (Tree 2) -> Test set
+    test_source = species_dir / "test"
+    if test_source.exists():
+        test_dir = organized_path / "test" / standardized_species
+        test_dir.mkdir(parents=True ,exist_ok=True)
+
+        for file_path in test_source.glob("*.txt"):
+            try:
+                file_info = extract_file_info_corrected(file_path.name)
+                new_filename = standardize_filename_corrected(
+                    file_path.name, standardized_species, 2, file_info['cube_id']
+                )
+                shutil.copy2(file_path, test_dir / new_filename)
+            except Exception as e:
+                print(f"    ⚠️ Error processing Swietenia test file {file_path.name}: {e}")
+
+
+def process_chamaecyparis_obtusa_var_formosana(species_dir, organized_path, standardized_species):
+    """Handle Chamaecyparis obtusa var. formosana with separate test directory"""
+
+    # Process main directory (Tree 1) -> Train set
+    train_dir = organized_path / "train" / standardized_species
+    train_dir.mkdir(parents=True, exist_ok=True)
+
+    for file_path in species_dir.glob("*.txt"):
+        try:
+            file_info = extract_file_info_corrected(file_path.name)
+            new_filename = standardize_filename_corrected(
+                file_path.name, standardized_species, 1, file_info['cube_id']
+            )
+            shutil.copy2(file_path, train_dir / new_filename)
+        except Exception as e:
+            print(f"    ⚠️ Error processing Chamaecyparis file {file_path.name}: {e}")
+
+    # Process test directory (Tree 2) -> Test set
+    test_source = species_dir / "test"
+    if test_source.exists():
+        test_dir = organized_path / "test" / standardized_species
+        test_dir.mkdir(parents=True, exist_ok=True)
+
+        for file_path in test_source.glob("*.txt"):
+            try:
+                file_info = extract_file_info_corrected(file_path.name)
+                new_filename = standardize_filename_corrected(
+                    file_path.name, standardized_species, 2, file_info['cube_id']
+                )
+                shutil.copy2(file_path, test_dir / new_filename)
+            except Exception as e:
+                print(f"    ⚠️ Error processing Chamaecyparis test file {file_path.name}: {e}")
+
+
+def fix_filename_convention():
+    """
+    Fix filename naming convention by swapping tree_id and cube_id positions
+    for species other than Chamaecyparis_Obtusa_var_Formosana and Swietenia_Marophylla
+    """
+
+    # Define paths
+    train_path = Path("../dataset/organized/train/")
+
+    # Species that are already correct (DON'T modify these)
+    correct_species = {
+        'Chamaecyparis_Obtusa_var_Formosana',
+        'Swietenia_Marophylla'
+    }
+
+    # Process each species directory
+    for species_dir in train_path.iterdir():
+        if not species_dir.is_dir():
+            continue
+
+        species_name = species_dir.name
+
+        # Skip species that are already correct
+        if species_name in correct_species:
+            print(f"  ✅ Skipping {species_name} (already correct)")
+            continue
+
+        print(f"  🔄 Fixing {species_name}...")
+
+        # Get all files in this species directory
+        files_to_rename = []
+        for file_path in species_dir.glob("*.txt"):
+            old_filename = file_path.name
+            new_filename = swap_tree_cube_ids(old_filename)
+
+            if old_filename != new_filename:
+                files_to_rename.append((file_path, new_filename))
+
+        # Rename files
+        for old_file_path, new_filename in files_to_rename:
+            new_file_path = old_file_path.parent / new_filename
+
+            # Check if new filename already exists (avoid conflicts)
+            if new_file_path.exists():
+                print(f"    ⚠️ Warning: {new_filename} already exists, skipping...")
+                continue
+
+            # Rename file
+            old_file_path.rename(new_file_path)
+
+        print(f"    ✅ Fixed {len(files_to_rename)} files")
+
+
+def swap_tree_cube_ids(filename):
+    """
+    Swap tree_id and cube_id positions in filename
+    Format: {energy}-{date}-{species}-{tree_id}-{cube_id}-{facet}-{point}.txt
+    """
+    parts = filename.split('-')
+
+    # Ensure we have enough parts
+    if len(parts) < 7:
+        return filename
+
+    # Swap positions 3 and 4 (tree_id and cube_id)
+    parts[3], parts[4] = parts[4], parts[3]
+
+    return '-'.join(parts)
+
+
+def clean_organized_dataset():
+    """
+    Remove third column from all .txt files in the organized dataset
+    """
+
+    # Define path to organized dataset
+    organized_path = Path("../dataset/organized/")
+
+    # Counter for processed files
+    files_processed = 0
+    files_with_errors = 0
+
+    # Process both train and test directories
+    for split in ["train", "test"]:
+        split_path = organized_path / split
+
+        if not split_path.exists():
+            print(f"    ⚠️ Directory {split_path} does not exist, skipping...")
+            continue
+
+        print(f"  🧹 Cleaning {split} dataset...")
+
+        # Process each species directory
+        for species_dir in split_path.iterdir():
+            if not species_dir.is_dir():
+                continue
+
+            species_name = species_dir.name
+
+            # Process all .txt files in species directory
+            txt_files = list(species_dir.glob("*.txt"))
+
+            for file_path in txt_files:
+                try:
+                    # Read file with polars (semicolon separator, no header)
+                    df = pl.read_csv(
+                        file_path,
+                        separator=";",
+                        has_header=False
+                    )
+
+                    # Check if file has 3 columns
+                    if df.shape[1] != 3:
+                        print(f"      ⚠️ Warning: {file_path.name} has {df.shape[1]} columns, expected 3")
+                        continue
+
+                    # Drop third column and keep only wavenumber and intensity
+                    df_cleaned = df.select([
+                        pl.col("column_1"),  # Wavenumber
+                        pl.col("column_2")  # Intensity
+                    ])
+
+                    # Write cleaned data back to file
+                    df_cleaned.write_csv(
+                        file_path,
+                        separator=";",
+                        include_header=False
+                    )
+
+                    files_processed += 1
+
+                except Exception as e:
+                    print(f"      ❌ Error processing {file_path.name}: {e}")
+                    files_with_errors += 1
+                    continue
+
+    print(f"    ✅ Files processed: {files_processed}")
+    print(f"    ❌ Files with errors: {files_with_errors}")
+
+
+def generate_metadata_file():
+    """Generate metadata file for the organized dataset"""
+
+    organized_path = Path("../dataset/organized/")
+    metadata_rows = []
+
+    for split in ["train", "test"]:
+        split_path = organized_path / split
+
+        if not split_path.exists():
+            continue
+
+        for species_dir in split_path.iterdir():
+            if not species_dir.is_dir():
+                continue
+
+            species_name = species_dir.name
+
+            for file_path in species_dir.glob("*.txt"):
+                # Parse standardized filename: Energy-Date-Species-Tree-Cube-Facet-Point.txt
+                parts = file_path.stem.split("-")
+                if len(parts) >= 7:
+                    energy = parts[0]
+                    date = parts[1]
+                    tree_id = parts[3]
+                    cube_id = parts[4]
+                    facet = parts[5]
+                    point = parts[6]
+
+                    metadata_rows.append({
+                        'filename': file_path.name,
+                        'species': species_name,
+                        'tree_id': tree_id,
+                        'cube_id': cube_id,
+                        'facet': facet,
+                        'point_id': point,
+                        'energy_mW': energy.replace('mW', ''),
+                        'date': date,
+                        'split': split,
+                        'tree_group': f"{species_name}_Tree_{tree_id}",
+                        'cube_group': f"{species_name}_Tree_{tree_id}_Cube_{cube_id}",
+                        'taxonomic_group': get_taxonomic_group(species_name)
+                    })
+
+    # Save metadata
+    metadata_df = pd.DataFrame(metadata_rows)
+    metadata_df.to_csv(organized_path / "dataset_metadata.csv", index=False)
+
+    print(f"  📊 Generated metadata for {len(metadata_rows)} files")
+    print(f"  🌳 Species processed: {sorted(metadata_df['species'].unique())}")
+    print(f"  🔢 Trees: {metadata_df['tree_group'].nunique()}")
+    print(f"  📦 Cubes: {metadata_df['cube_group'].nunique()}")
+
+    return metadata_df
+
+
+def get_taxonomic_group(species_name):
+    """Assign taxonomic group based on species"""
+    hardwood_species = [
+        'Acacia_Confusa', 'Acacia_Mangium', 'Machilus_Kusanoi',
+        'Swietenia_Mahagoni', 'Swietenia_Marophylla'
+    ]
+    return 'Hardwood' if species_name in hardwood_species else 'Softwood'
+
+
+def verify_organization():
+    """Final verification of the organized dataset"""
+
+    organized_path = Path("../dataset/organized/")
+
+    print("  🔍 Verifying organization...")
+
+    # Check directory structure
+    train_path = organized_path / "train"
+    test_path = organized_path / "test"
+    metadata_path = organized_path / "dataset_metadata.csv"
+
+    print(f"    📁 Train directory exists: {train_path.exists()}")
+    print(f"    📁 Test directory exists: {test_path.exists()}")
+    print(f"    📄 Metadata file exists: {metadata_path.exists()}")
+
+    # Count files
+    train_files = sum(len(list(species_dir.glob("*.txt")))
+                      for species_dir in train_path.iterdir()
+                      if species_dir.is_dir())
+    test_files = sum(len(list(species_dir.glob("*.txt")))
+                     for species_dir in test_path.iterdir()
+                     if species_dir.is_dir())
+
+    print(f"    📊 Training files: {train_files}")
+    print(f"    📊 Test files: {test_files}")
+    print(f"    📊 Total files: {train_files + test_files}")
+
+    # Verify file structure
+    sample_files = []
+    for split in ["train", "test"]:
+        split_path = organized_path / split
+        if split_path.exists():
+            for species_dir in split_path.iterdir():
+                if species_dir.is_dir():
+                    txt_files = list(species_dir.glob("*.txt"))
+                    if txt_files:
+                        sample_files.append(txt_files[0])
+                        break
+            if sample_files:
+                break
+
+    if sample_files:
+        sample_file = sample_files[0]
+        try:
+            df = pl.read_csv(sample_file, separator=";", has_header=False)
+            print(f"    🔬 Sample file columns: {df.shape[1]} (should be 2)")
+            print(f"    🔬 Sample file shape: {df.shape}")
+        except Exception as e:
+            print(f"    ❌ Error reading sample file: {e}")
+
+
+# Execute complete organization
+if __name__ == "__main__":
+    metadata_df = complete_dataset_organization()
+
+    # Print final summary
+    print("\n" + "=" * 50)
+    print("📈 FINAL DATASET ORGANIZATION SUMMARY")
+    print("=" * 50)
+    print(f"✅ Total files processed: {len(metadata_df)}")
+    print(f"🎯 Training files: {len(metadata_df[metadata_df['split'] == 'train'])}")
+    print(f"🧪 Test files: {len(metadata_df[metadata_df['split'] == 'test'])}")
+    print(f"🌲 Species: {metadata_df['species'].nunique()}")
+    print(f"🌳 Unique trees: {metadata_df['tree_group'].nunique()}")
+    print(f"📦 Unique cubes: {metadata_df['cube_group'].nunique()}")
+    print(f"🏷️ Taxonomic groups: {sorted(metadata_df['taxonomic_group'].unique())}")
+    print("\n🎉 Dataset is ready for machine learning analysis!")
