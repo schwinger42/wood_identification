@@ -1,0 +1,20 @@
+# Ignore IDE and OS specific files
+.idea/
+.DS_Store
+
+# Ignore Python virtual environments
+.venv/
+
+# Ignore generated Python files
+__pycache__/
+*.pyc
+
+# Ignore all PNG image files as requested
+*.png
+
+# Also ignore JPG files (good practice)
+*.jpg
+*.jpeg
+
+# Ignore the .junie directory as requested
+.junie/
