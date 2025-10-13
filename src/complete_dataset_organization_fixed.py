@@ -10,7 +10,7 @@ def complete_dataset_organization():
     # Get project root directory (go up one level from src/)
     project_root = Path(__file__).parent.parent  # This moves from src/ to project root
     raw_path = project_root / "dataset" / "raw"
-    organized_path = project_root / "dataset" / "organized_current"
+    organized_path = project_root / "dataset" / "organized"
 
     # Verify raw dataset exists
     if not raw_path.exists():
