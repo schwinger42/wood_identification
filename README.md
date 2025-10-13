@@ -13,3 +13,5 @@ run this for streamlit app:
 ```bash
 streamlit run app.py
 ```
+![avg_plot](tree_average_plot.png)
+![tree_comparison](trees_comparison.png)
