@@ -1,17 +1,15 @@
-# Guide
-run this for dataset organization:  
+# Raman wood species identification — v1
+
+Proof of concept with Prof. Tsao (NCHU): identify Taiwanese timber species from Raman spectra
+(532 nm benchtop instrument) with ML, evaluated at the **tree** level.
+
 ```bash
-python src/complete_dataset_organization_fixed.py
+uv sync                                          # Python 3.12 env from uv.lock
+uv run pytest                                    # parsing + leak-free splitters
+uv run python experiments/00_confound_audit.py   # confound audit -> results/<date>_00_confound_audit/
 ```
 
-run this for CLI prediction:  
-```bash
-python predict.py "dataset/organized/test/Swietenia_Marophylla/24mW-20250926-Swietenia_Marophylla-2-1-C-9.txt" 
-```
-
-run this for streamlit app:  
-```bash
-streamlit run app.py
-```
-![avg_plot](tree_average_plot.png)
-![tree_comparison](trees_comparison.png)
+- `CLAUDE.md` — data facts, evaluation contract, research direction (read this first).
+- `docs/literature-2026-10.md` — literature map.
+- `docs/measurement-protocol-v1.md` — what to ask and how to measure the next batch.
+- The v0 pipeline and Streamlit demo (Sep–Oct 2025) live at git tag `v0-legacy`.

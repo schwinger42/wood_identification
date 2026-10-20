@@ -1,20 +1,22 @@
-# Ignore IDE and OS specific files
+# IDE / OS
 .idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .DS_Store
 
-# Ignore Python virtual environments
+# Python
 .venv/
-
-# Ignore generated Python files
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
 
-# Ignore all PNG image files as requested
-*.png
+# Generated (reproduce from committed scripts; never commit by hand)
+results/
+models/
+*.pkl
 
-# Also ignore JPG files (good practice)
-*.jpg
-*.jpeg
-
-# Ignore the .junie directory as requested
+# Agent scratch
 .junie/
