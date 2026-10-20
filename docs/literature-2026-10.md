@@ -89,6 +89,12 @@ not proof of absence — confirm the gap with a Scopus/WoS query before writing 
   (LOBO 0.74 vs 0.73) and better on held-out Swietenia trees (0.84 vs 0.42–0.62). One shared shape explains
   a median 74% of each spectrum's variance. → The current data mostly carry instrument/background/session
   structure, not wood chemistry. Fix acquisition before modelling.
+- Method sweep (experiments/01_method_sweep.py): 6 preprocessings × 6 classifiers (PCA-LDA, PLS-DA, linear SVM,
+  logistic regression, random forest, MLP). Best within-day held-out-tree recall 0.71 vs 0.69 for the same
+  method on the silent region; no method clears the control by more than 0.10. Model choice is not the bottleneck.
+- Inflation ladder: spot-level random CV 0.91 (silent 0.93) → leave-one-block-out 0.73 → held-out tree 0.43.
+- Framing for a paper from the fixed data: shortcut learning (Geirhos et al. 2020, *Nat. Mach. Intell.*
+  2:665–673, doi:10.1038/s42256-020-00257-z) detected with spectral negative controls.
 
 ## Candidate contributions (unchanged, now with a prerequisite)
 0. Prerequisite: clean acquisition (raw export, dark, intensity calibration, fixed laser dose, dried samples)

@@ -11,7 +11,8 @@
 - Environment: `uv sync` (Python >= 3.12, lockfile `uv.lock`). Add deps with `uv add <pkg>`.
 - Run anything: `uv run python <script>`; tests: `uv run pytest`; lint: `uv run ruff check .`;
   notebooks: `uv run jupyter lab`.
-- Confound audit (run after ANY data or pipeline change): `uv run python experiments/00_confound_audit.py`
+- Confound audit (run after ANY data or pipeline change): `uv run python experiments/00_confound_audit.py` (~1 min)
+- Method sweep, 36 preprocessing × classifier combos vs negative controls: `uv run python experiments/01_method_sweep.py` (~40 min on 4 cores)
 - Legacy v0 pipeline + Streamlit demo: git tag `v0-legacy`. To run the old demo without polluting this tree:
   `git worktree add ../wood_v0 v0-legacy`. Never copy v0 code or "proven parameters" back into `src/`.
 
@@ -24,9 +25,16 @@
   instrument software. Raw export is NOT in the repo; ask Prof. Tsao.
 - **The dominant structure is not wood chemistry.** One shared shape explains a median 74% of each
   spectrum's variance; between-species median correlation is 0.84 overall and 0.83 in the Raman-silent region
-  1850–2700 cm-1 (no wood bands there). No dominant C-H band at ~2900. Hypothesis to test with raw exports +
-  an intensity standard: large lignin fluorescence × uncorrected instrument response (filter ripple / pixel gain)
-  survives baseline subtraction as a fixed pattern.
+  1850–2700 cm-1 (no wood bands there). The shape is stable across days (per-date medians correlate
+  0.94–0.99 with the global median; no wavenumber drift > 0.5 cm-1) → instrument-fixed pattern.
+- Real wood bands ARE present but small: peaks at ~1327, ~1457, ~1661, ~1107 and ~2957 (C-H, prominence 683)
+  match expected bands, yet bumps of the same size sit in the silent region (2259/2490/2628: 616–625) and the
+  biggest peaks (1016, 648, 832) match no wood band. 1600 (lignin, normally the strongest band) is a DIP.
+  The vendor anchor at 2810–2832 sits on the low edge of the C-H band and may distort it.
+- The pattern's overall amplitude alone does NOT predict species (LOBO 0.15, chance 0.11); the shortcut is in
+  shape, not scale. No consistent wavenumber-axis offset vs expected band positions.
+- Hypothesis to test with raw exports + an intensity standard: lignin fluorescence × uncorrected instrument
+  response (filter ripple / pixel gain) survives vendor baseline subtraction as a fixed pattern.
 - 3 whole-spectrum outliers (median level >10× typical, up to 52.6k counts): `C. obtusa var. formosana 2-4-C-8`,
   `Fokienia 1-T-8` (0922), `S. macrophylla 2-1-T-6`. Not cosmic rays (no sharp 2nd-difference spikes found
   anywhere). Flag them; never silently clip.
@@ -53,6 +61,16 @@
 - Silent region 1850–2700 predicts species as well as the fingerprint (LOBO 0.74 vs 0.73, chance 0.11) and
   better on held-out Swietenia trees (0.84/0.84 vs 0.62/0.42). O-H region alone: LOBO 0.69.
 - Held-out-tree recall (9-class, fingerprint): C. obtusa var. formosana 0.33/0.33, S. macrophylla 0.62/0.42.
+- Inflation ladder (9-class PCA-LDA, fingerprint / silent): spot-level random 5-fold 0.91 / 0.93 →
+  LOBO 0.73 / 0.74 → held-out tree 0.43 / 0.60. Quote spot-level only as this demonstration.
+- The silent-region shortcut lives in NARROW structure (<120 cm-1 scale: LOBO 0.73, date 0.98), not in the
+  broad background (LOBO 0.52) → baseline correction or derivatives cannot remove it.
+- Method sweep (experiments/01, 6 preprocessings × 6 classifiers incl. RF/MLP, untuned): best within-day
+  held-out-tree recall 0.71 (SG1+SNV+RF) vs its silent control 0.69; max fingerprint−silent margin 0.10.
+  C. obtusa var. formosana tree 2 is never recognised (0.12–0.47 in all 36) — it looks like C. formosensis.
+  EPO from Fokienia session pairs removes the date signal but does not improve species generalisation.
+  Picking the best of 36 on 4 test trees is itself selection bias. With 4 held-out trees, even 4/4 has a
+  95% CI of [0.40, 1.00]: no method can make a species-level claim from this data.
 - Within-day pairs are the only species comparisons not confounded by session. Best evidence of chemistry:
   0925 Chamaecyparis pair, LOBO fingerprint 0.73 > silent 0.58 > O-H 0.47 (chance 0.5) — but held-out tree
   0.86 / 0.39. In the 0926 Swietenia pair, O-H (0.92) and silent (0.81) match or beat fingerprint (0.83).
@@ -75,9 +93,9 @@
    goes into a slide or paper unless it is reproducible from a committed script.
 
 ## Code layout
-- `src/woodraman/`: `io.py` (parsing + metadata), `preprocess.py` (sklearn transformers: Crop, SNV, …),
-  `splits.py` (group splitters + `assert_no_leak`). To add: baseline (asPLS/arPLS/SNIP via pybaselines),
-  EMSC, `models/`, `evaluate.py`.
+- `src/woodraman/`: `io.py` (parsing + metadata), `preprocess.py` (Crop, SNV, SGDerivative, ASPLSBaseline,
+  NuisanceProjector/EPO), `splits.py` (group splitters + `assert_no_leak`), `models.py` (PLS-DA + fixed
+  baseline classifiers). To add: EMSC, `evaluate.py`.
 - `experiments/NN_<name>.py`: thin scripts importing `woodraman`; one question per script.
 - `notebooks/`: exploration only; move anything reusable into `src/`.
 - `results/`, `models/`: generated and git-ignored.
@@ -101,9 +119,10 @@
   PLS-DA); none found for 2024–2026; no Raman-wood paper models moisture; no public Raman wood DB.
 - Leakage is the field's main flaw: image-level CV 0.95 → leave-trees-out 0.22–0.30
   (Rosa da Silva et al. 2022, Plant Methods). Cite it when defending tree-level splits.
-- Current bottleneck is ACQUISITION (see audit), not the model. Next data batch follows
-  `docs/measurement-protocol-v1.md`: raw export, dark, intensity standard, dried samples, fixed laser dose,
-  ≥3 (target 5) trees/species, all species in every session.
+- Current bottleneck is ACQUISITION (see audit), not the model. CONSTRAINT: no new measurements during the
+  PoC — the 1050 spectra are fixed. Free asks that are not new measurements: re-export the SAME measurements
+  raw (before vendor baseline) if the instrument software kept them; measurement order/time stamps;
+  instrument parameters. `docs/measurement-protocol-v1.md` is the data plan for the funding proposal.
 - At this n, DL is not expected to beat PCA-LDA/PLS-DA/SVM. DL work = learning curves +
   augmentation + optional pretraining, framed as a controlled comparison, not the headline.
 - Candidate contributions: (1) hierarchical split audit + variance decomposition + negative controls;
