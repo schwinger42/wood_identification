@@ -10,6 +10,7 @@ uv run python experiments/00_confound_audit.py   # confound audit -> results/<da
 ```
 
 - `CLAUDE.md` — data facts, evaluation contract, research direction (read this first).
+- `docs/research-status-2026-10.md` — what the data can and cannot show, and why.
 - `docs/literature-2026-10.md` — literature map.
 - `docs/measurement-protocol-v1.md` — what to ask and how to measure the next batch.
 - The v0 pipeline and Streamlit demo (Sep–Oct 2025) live at git tag `v0-legacy`.

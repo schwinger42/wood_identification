@@ -14,6 +14,7 @@
 - Confound audit (run after ANY data or pipeline change): `uv run python experiments/00_confound_audit.py` (~1 min)
 - Method sweep, 36 preprocessing × classifier combos vs negative controls: `uv run python experiments/01_method_sweep.py` (~40 min on 4 cores)
 - Generalisation ladder + softwood/hardwood unseen-day test + band-feature controls: `uv run python experiments/02_generalisation_ladder.py` (~3 min)
+- Signal budget (how big each source of spectral difference is): `uv run python experiments/03_signal_budget.py` (~10 s)
 - Legacy v0 pipeline + Streamlit demo: git tag `v0-legacy`. To run the old demo without polluting this tree:
   `git worktree add ../wood_v0 v0-legacy`. Never copy v0 code or "proven parameters" back into `src/`.
 
@@ -59,6 +60,14 @@
 | 0926 | S. mahagoni, S. macrophylla | 24 mW |
 - Session effect: on the same two Fokienia blocks, date is predictable on the held-out block
   (balanced acc 0.93 fingerprint, 0.98 silent region; only 2 blocks, so weak evidence but consistent).
+- **Signal budget (experiments/03, RMS difference of group-mean SNV spectra, debiased; fingerprint / silent):**
+  tree vs tree same species same day 0.46 / 0.31 · species vs species same day 0.38 / 0.39 ·
+  single-spectrum noise 0.39 / 0.42 · block vs block same tree 0.20 / 0.31 · same wood, other day 0.17 / 0.33.
+  → Between-tree variation EXCEEDS the species difference (main reason held-out trees fail; needs more trees).
+  → The day effect is SMALLER than the species difference in magnitude (~half) but consistent, hence learnable;
+    with species nested in days it becomes a shortcut. Do NOT write "day effect > species difference".
+  → Single spectra are as noisy as the species difference: classify per sample from many spots, not per spectrum.
+  Tiny n behind each row (tree 2 pairs, species 3, day 2): read as orders of magnitude.
 - Silent region 1850–2700 predicts species as well as the fingerprint (LOBO 0.74 vs 0.73, chance 0.11) and
   better on held-out Swietenia trees (0.84/0.84 vs 0.62/0.42). O-H region alone: LOBO 0.69.
 - Held-out-tree recall (9-class, fingerprint): C. obtusa var. formosana 0.33/0.33, S. macrophylla 0.62/0.42.
@@ -105,7 +114,8 @@
 - `experiments/NN_<name>.py`: thin scripts importing `woodraman`; one question per script.
 - `notebooks/`: exploration only; move anything reusable into `src/`.
 - `results/`, `models/`: generated and git-ignored.
-- `docs/`: `literature-2026-10.md`, `measurement-protocol-v1.md`.
+- `docs/`: `research-status-2026-10.md` (current state, read first), `literature-2026-10.md`,
+  `measurement-protocol-v1.md`. Full version for Prof. Tsao: https://claude.ai/artifact/U2hk4BiMvjXmNf88ibs96d
 - No absolute paths; resolve from `woodraman.io.REPO_ROOT`. Type hints, small pure functions,
   pytest for parsing and splitters (`tests/`).
 
