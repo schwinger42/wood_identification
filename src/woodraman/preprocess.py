@@ -30,6 +30,9 @@ class Crop(BaseEstimator, TransformerMixin):
 class SNV(BaseEstimator, TransformerMixin):
     """Standard normal variate: per-spectrum centring and scaling (stateless)."""
 
+    def __sklearn_is_fitted__(self):  # stateless
+        return True
+
     def fit(self, X, y=None):
         return self
 
@@ -48,6 +51,9 @@ class SGDerivative(BaseEstimator, TransformerMixin):
         self.window = window
         self.polyorder = polyorder
 
+    def __sklearn_is_fitted__(self):  # stateless
+        return True
+
     def fit(self, X, y=None):
         return self
 
@@ -65,6 +71,9 @@ class ASPLSBaseline(BaseEstimator, TransformerMixin):
     def __init__(self, wavenumbers: np.ndarray, lam: float = 1e5):
         self.wavenumbers = wavenumbers
         self.lam = lam
+
+    def __sklearn_is_fitted__(self):  # stateless
+        return True
 
     def fit(self, X, y=None):
         return self
@@ -85,6 +94,9 @@ class NuisanceProjector(BaseEstimator, TransformerMixin):
 
     def __init__(self, basis: np.ndarray):
         self.basis = basis
+
+    def __sklearn_is_fitted__(self):  # stateless
+        return True
 
     def fit(self, X, y=None):
         return self

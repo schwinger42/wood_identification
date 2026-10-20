@@ -13,6 +13,7 @@
   notebooks: `uv run jupyter lab`.
 - Confound audit (run after ANY data or pipeline change): `uv run python experiments/00_confound_audit.py` (~1 min)
 - Method sweep, 36 preprocessing × classifier combos vs negative controls: `uv run python experiments/01_method_sweep.py` (~40 min on 4 cores)
+- Generalisation ladder + softwood/hardwood unseen-day test + band-feature controls: `uv run python experiments/02_generalisation_ladder.py` (~3 min)
 - Legacy v0 pipeline + Streamlit demo: git tag `v0-legacy`. To run the old demo without polluting this tree:
   `git worktree add ../wood_v0 v0-legacy`. Never copy v0 code or "proven parameters" back into `src/`.
 
@@ -71,6 +72,11 @@
   EPO from Fokienia session pairs removes the date signal but does not improve species generalisation.
   Picking the best of 36 on 4 test trees is itself selection bias. With 4 held-out trees, even 4/4 has a
   95% CI of [0.40, 1.00]: no method can make a species-level claim from this data.
+- **Unseen-day test (experiments/02):** softwood vs hardwood (chemically the easiest split), leave-one-DAY-out:
+  balanced acc fingerprint 0.37, silent 0.39, C-H 0.23, O-H 0.18 — BELOW chance 0.5 — vs 0.62–0.69 with
+  leave-one-tree-out. Whatever the models learn does not survive a new measurement day.
+- Known-band features (13 wood bands) do no better than the same features at random off-band fingerprint
+  positions (experiments/02). 0925 pair: fingerprint beats silent in 9/10 methods but by only ~0.06 on average.
 - Within-day pairs are the only species comparisons not confounded by session. Best evidence of chemistry:
   0925 Chamaecyparis pair, LOBO fingerprint 0.73 > silent 0.58 > O-H 0.47 (chance 0.5) — but held-out tree
   0.86 / 0.39. In the 0926 Swietenia pair, O-H (0.92) and silent (0.81) match or beat fingerprint (0.83).
@@ -104,9 +110,13 @@
   pytest for parsing and splitters (`tests/`).
 
 ## Spectroscopy notes
-- Wood Raman bands to sanity-check against: ~380, ~1095/1120 (cellulose), ~1270, ~1330,
-  ~1378, ~1460, ~1600 (lignin aromatic), ~1660 (coniferaldehyde/C=C), ~2890–2940 (C-H).
-  Water: broad O-H stretch 3000–3600 (main), weak H-O-H bend ~1640 overlapping lignin bands.
+- Wood Raman bands, checked 2026-10-21 against sources (Agarwal 2019 Molecules 24:1659; Yamauchi et al. 2005
+  J Wood Sci 51:498; Vardaki et al. 2024 RSC Chem Biol 5:273; Masson et al. 2018 Analyst):
+  380 cellulose; 370 + 417–531 S-lignin (hardwoods); 1095/1100 cellulose; 1255–1290 G-lignin; 1320–1338 S-lignin;
+  1380 and 1460/1480 cellulose (CH2/CH deformation); 1540–1700 lignin, incl. 1600 (conjugated aromatic) and
+  1655–1660 (C=C, C=O); 2800–2918 carbohydrate C-H, 2940 S-lignin, 2800–3030 all C-H;
+  1800–2800 "silent" (only triple bonds / C-D; absent from biological molecules); ~3035–3680 O-H (water).
+  Water: broad O-H stretch is the main band; weak H-O-H bend ~1640 overlaps lignin bands.
   Water is a weak Raman scatterer; at 532 nm the bigger moisture effect is on lignin FLUORESCENCE
   (moisture quenches it, Peters & Rapp 2024), i.e. on the background, across the whole window.
 - SERDS (two shifted lasers) removes fluorescence/fixed-pattern background, NOT water Raman bands.
