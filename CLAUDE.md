@@ -103,7 +103,7 @@ Rule: a number enters this file only with the script that reproduces it. No sour
 - `notebooks/`: exploration only; move anything reusable into `src/`.
 - `results/`, `models/`: generated and git-ignored.
 - `docs/`: `research-status-2026-10.md` (current state, read first), `literature-2026-10.md`,
-  `measurement-protocol-v1.md`. Full version for Prof. Tsao: https://claude.ai/artifact/U2hk4BiMvjXmNf88ibs96d
+  `measurement-protocol-v1.md`, `methods-paper-outline-2026-10.md`. Full version for Prof. Tsao: https://claude.ai/artifact/U2hk4BiMvjXmNf88ibs96d
 - No absolute paths; resolve from `woodraman.io.REPO_ROOT`. Type hints, small pure functions,
   pytest for parsing and splitters (`tests/`).
 
