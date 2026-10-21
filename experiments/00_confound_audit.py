@@ -3,13 +3,14 @@
 Question: how much of the apparent "species signal" is really session (date), moisture (O-H region)
 or within-tree structure? Every number here uses a group split; nothing is spot-level random CV.
 
-Writes results/<YYYYMMDD>_00_confound_audit/{metrics.json, inventory.csv, median_spectra.png}.
+Writes results/<YYYYMMDD>_00_confound_audit/{metrics.json, config.json, inventory.csv, median_spectra.png}.
 """
 
 from __future__ import annotations
 
 import json
 from datetime import date
+from itertools import combinations
 
 import matplotlib
 
@@ -19,9 +20,9 @@ import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.metrics import balanced_accuracy_score
 from sklearn.pipeline import make_pipeline
 
+from woodraman.evaluate import classification_metrics, run_config, write_run
 from woodraman.io import REPO_ROOT, load_dataset
 from woodraman.preprocess import SNV, Crop, spike_score_2nd_diff
 from woodraman.splits import assert_no_leak, held_out_tree_folds, leave_one_group_out
@@ -42,6 +43,8 @@ WITHIN_DAY_PAIRS = {
     ),
     "0926_Swietenia_pair": ("20250926", ["Swietenia mahagoni", "Swietenia macrophylla"]),
     "0922_Cobtusa_vs_Fokienia": ("20250922", ["Chamaecyparis obtusa", "Fokienia hodginsii"]),
+    # the only same-day softwood vs hardwood pair (Fokienia: the same 2 blocks, spots 11-15)
+    "0923_Aconfusa_vs_Fokienia": ("20250923", ["Acacia confusa", "Fokienia hodginsii"]),
 }
 
 
@@ -56,21 +59,22 @@ def model(wn: np.ndarray, region: str, n_components: int = 20):
 
 
 def grouped_cv(X, y, meta, wn, region, level="block_id") -> dict:
-    """Leave-one-group-out; returns spot-level balanced acc and group-level (majority vote) acc."""
+    """Leave-one-group-out; spot-level balanced acc, macro-F1, confusion matrix and group (majority vote) acc."""
     pred = np.empty(len(y), dtype=object)
     for train, test in leave_one_group_out(meta, level):
         assert_no_leak(meta, train, test, level)
         n_comp = min(20, len(train) - 1)
         pred[test] = model(wn, region, n_comp).fit(X[train], y[train]).predict(X[test])
-    df = pd.DataFrame({"g": meta[level].to_numpy(), "y": y, "p": pred})
-    # majority vote over the test spectra of one (group, true label) unit, e.g. the 30 spectra of a block
-    vote = df.groupby(["g", "y"]).p.agg(lambda s: s.mode().iloc[0]).reset_index()
+    m = classification_metrics(y, pred, groups=meta[level].to_numpy())
     return {
         "split": f"leave-one-{level.removesuffix('_id')}-out",
-        "spot_balanced_acc": round(float(balanced_accuracy_score(y, pred.astype(str))), 3),
-        f"{level.removesuffix('_id')}_vote_acc": round(float((vote.y == vote.p).mean()), 3),
-        "n_vote_units": int(vote.shape[0]),
+        "spot_balanced_acc": round(m["balanced_accuracy"], 3),
+        f"{level.removesuffix('_id')}_vote_acc": round(m["group_vote_accuracy"], 3),
+        "n_vote_units": m["n_groups"],
         "chance": round(1 / len(np.unique(y)), 3),
+        "macro_f1": round(m["macro_f1"], 3),
+        "per_class_recall": {k: round(v, 3) for k, v in m["per_class_recall"].items()},
+        "confusion_matrix": m["confusion_matrix"],
     }
 
 
@@ -103,6 +107,24 @@ def main() -> None:
         "n_blocks": int(meta.block_id.nunique()),
         "species_with_gt1_tree": sorted(meta.groupby("species").tree_id.nunique().loc[lambda s: s > 1].index),
     }
+
+    # Which species pairs can be compared without the day confound? Sharing a day = direct; days linked by a
+    # species measured on both (Fokienia: 0922 + 0923) = only via that bridge; otherwise aliased with the day.
+    days_of = meta.groupby("species").date.agg(set)
+    group = {d: {d} for d in meta.date.unique()}
+    for ds in days_of:
+        merged = set().union(*(group[d] for d in ds))
+        for d in merged:
+            group[d] = merged
+    pair_kind: dict[str, list] = {"same_day": [], "bridged": [], "aliased_with_day": []}
+    for a, b in combinations(sorted(days_of.index), 2):
+        if days_of[a] & days_of[b]:
+            pair_kind["same_day"].append([a, b])
+        elif group[min(days_of[a])] == group[min(days_of[b])]:
+            pair_kind["bridged"].append([a, b])
+        else:
+            pair_kind["aliased_with_day"].append([a, b])
+    metrics["species_pairs_vs_day"] = {"counts": {k: len(v) for k, v in pair_kind.items()}, **pair_kind}
 
     # 2. Data quality --------------------------------------------------------------------------
     nonpos = X <= 0
@@ -160,6 +182,7 @@ def main() -> None:
             held[r][tree] = {
                 "recall": round(float((p == y_sp[test][0]).mean()), 3),
                 "predicted_as": vc.head(3).to_dict(),
+                "confusion_matrix": classification_metrics(y_sp[test], p)["confusion_matrix"],
             }
     metrics["held_out_tree_9class"] = held
 
@@ -200,7 +223,13 @@ def main() -> None:
         for r in ("fingerprint_400_1800", "OH_water_3050_3500")
     }
 
-    (out / "metrics.json").write_text(json.dumps(metrics, indent=2, ensure_ascii=False))
+    config = run_config(
+        "experiments/00_confound_audit.py",
+        regions=REGIONS,
+        within_day_pairs=WITHIN_DAY_PAIRS,
+        pca_components=20,
+    )
+    write_run(out, metrics, config)
 
     # 8. Figure: median spectrum per species (SNV on 400-3500), water region shaded -----------
     keep = (wn >= 400) & (wn <= 3500)

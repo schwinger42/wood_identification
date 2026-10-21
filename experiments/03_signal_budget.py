@@ -9,7 +9,7 @@ sampling noise of the means: d^2 = mean_k[(m1-m2)^2 - s1^2/n1 - s2^2/n2]. Same u
   day vs day           : the SAME Fokienia blocks measured on 0922 and on 0923 (pure measurement-day effect)
 Run on the fingerprint region (wood chemistry) and the silent region (no wood chemistry: any "effect" there is
 instrument/background, i.e. the floor that chemistry has to rise above).
-Writes results/<YYYYMMDD>_03_signal_budget/signal_budget.csv.
+Writes results/<YYYYMMDD>_03_signal_budget/{signal_budget.csv, metrics.json, config.json}.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
+from woodraman.evaluate import run_config, write_run
 from woodraman.io import REPO_ROOT, load_dataset
 from woodraman.preprocess import SNV, Crop
 
@@ -102,6 +103,8 @@ def main() -> None:
             allrows.append({"region": region, **r})
     df = pd.DataFrame(allrows)
     df.to_csv(out / "signal_budget.csv", index=False)
+    config = run_config("experiments/03_signal_budget.py", regions=REGIONS, same_day_species=SAME_DAY_SPECIES)
+    write_run(out, {"signal_budget": df.to_dict(orient="records")}, config)
     print(df.pivot(index="effect", columns="region", values="value").round(3).to_string())
     print(f"\nWrote {out}")
 

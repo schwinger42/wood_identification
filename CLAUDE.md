@@ -11,36 +11,31 @@
 - Environment: `uv sync` (Python >= 3.12, lockfile `uv.lock`). Add deps with `uv add <pkg>`.
 - Run anything: `uv run python <script>`; tests: `uv run pytest`; lint: `uv run ruff check .`;
   notebooks: `uv run jupyter lab`.
-- Confound audit (run after ANY data or pipeline change): `uv run python experiments/00_confound_audit.py` (~1 min)
-- Method sweep, 36 preprocessing × classifier combos vs negative controls: `uv run python experiments/01_method_sweep.py` (~40 min on 4 cores)
-- Generalisation ladder + softwood/hardwood unseen-day test + band-feature controls: `uv run python experiments/02_generalisation_ladder.py` (~3 min)
-- Signal budget (how big each source of spectral difference is): `uv run python experiments/03_signal_budget.py` (~10 s)
+- Confound audit (run after ANY data or pipeline change): `uv run python experiments/00_confound_audit.py` (~45 s)
+- Method sweep, 36 preprocessing × classifier combos vs negative controls: `uv run python experiments/01_method_sweep.py` (~2 min)
+- Generalisation ladder + softwood/hardwood unseen-day test with permutation p + band-feature controls:
+  `uv run python experiments/02_generalisation_ladder.py` (~3 min)
+- Signal budget (how big each source of spectral difference is): `uv run python experiments/03_signal_budget.py` (~1 s)
+- Shared instrument pattern (peaks, day stability, amplitude-only, broad vs narrow scale):
+  `uv run python experiments/04_shared_pattern.py` (~15 s)
+- Timings are with `OMP_NUM_THREADS=8 LOKY_MAX_CPU_COUNT=8` (2026-10-22). Set these when running scripts in parallel:
+  uncapped BLAS threads in 4 parallel runs drove load to ~96 on 32 cores and made a 45 s script take 15+ min.
+- Every script writes `results/<YYYYMMDD>_<exp>/metrics.json` + `config.json` (commit, dirty flag, versions,
+  parameters) via `woodraman.evaluate.write_run`, next to its CSVs.
 - Legacy v0 pipeline + Streamlit demo: git tag `v0-legacy`. To run the old demo without polluting this tree:
   `git worktree add ../wood_v0 v0-legacy`. Never copy v0 code or "proven parameters" back into `src/`.
 
-## Data facts (verified 2026-10-21 by experiments/00_confound_audit.py)
+## Data facts (each bullet names its source script, `[00]` = experiments/00_…; re-run 2026-10-22)
+Rule: a number enters this file only with the script that reproduces it. No source = say UNVERIFIED.
 - `dataset/raw/<species>/**/*.txt`, 1050 spectra, `;`-separated, CRLF, 3 columns:
   Raman shift (cm-1), intensity, all-zero column. 2005 points, 98.6–3509.8 cm-1,
-  non-uniform spacing (1.01–2.59 cm-1), identical axis in every file.
-- Exported data looks vendor-processed: ~3% negative values; 78% / 81% of spectra are <= 0 inside
-  955–980 / 2810–2832 cm-1 (spectrum minima cluster there) → likely fixed-anchor baseline subtraction by the
-  instrument software. Raw export is NOT in the repo; ask Prof. Tsao.
-- **The dominant structure is not wood chemistry.** One shared shape explains a median 74% of each
-  spectrum's variance; between-species median correlation is 0.84 overall and 0.83 in the Raman-silent region
-  1850–2700 cm-1 (no wood bands there). The shape is stable across days (per-date medians correlate
-  0.94–0.99 with the global median; no wavenumber drift > 0.5 cm-1) → instrument-fixed pattern.
-- Real wood bands ARE present but small: peaks at ~1327, ~1457, ~1661, ~1107 and ~2957 (C-H, prominence 683)
-  match expected bands, yet bumps of the same size sit in the silent region (2259/2490/2628: 616–625) and the
-  biggest peaks (1016, 648, 832) match no wood band. 1600 (lignin, normally the strongest band) is a DIP.
-  The vendor anchor at 2810–2832 sits on the low edge of the C-H band and may distort it.
-- The pattern's overall amplitude alone does NOT predict species (LOBO 0.15, chance 0.11); the shortcut is in
-  shape, not scale. No consistent wavenumber-axis offset vs expected band positions.
+  non-uniform spacing (1.01–2.59 cm-1), identical axis in every file. [00, `woodraman.io`]
 - Hypothesis to test with raw exports + an intensity standard: lignin fluorescence × uncorrected instrument
   response (filter ripple / pixel gain) survives vendor baseline subtraction as a fixed pattern.
 - 3 whole-spectrum outliers (median level >10× typical, up to 52.6k counts): `C. obtusa var. formosana 2-4-C-8`,
   `Fokienia 1-T-8` (0922), `S. macrophylla 2-1-T-6`. Not cosmic rays (no sharp 2nd-difference spikes found
-  anywhere). Flag them; never silently clip.
-- Hierarchy: species → tree → block (cube) → face (C/R/T) → spot. 30 spectra/block (Fokienia on 0923: 15).
+  anywhere). Flag them; never silently clip. [00]
+- Hierarchy: species → tree → block (cube) → face (C/R/T) → spot. 30 spectra/block (Fokienia on 0923: 15). [00]
 - Three filename variants, parsed by `woodraman.io.parse_filename`:
   `24mW-<date>-<sp>-<tree>-<block>-<face>-<spot>`, `24mW-<date>-<sp>-<block>-<face>-<spot>`,
   `<date>-<sp>-<block>-<face>-<spot>` (laser power NOT recorded; legacy code assumed 100 mW).
@@ -48,8 +43,24 @@
   The statistical unit is the TREE, not the spectrum.
 - Folder typos are kept on disk and mapped in code (`SPECIES_CANONICAL`): `Swietenia marophylla` /
   `marcrophylla` = S. macrophylla; `Chamaecyparis obyusa` = ASSUMED C. obtusa (Japanese hinoki) — confirm.
+- `Swietenia marophylla/test/` and `Chamaecyparis obtusa var. formosana/test/` (90 files each) are simply
+  TREE 2 of those species, present since the first upload (2025-10-12). The name is not a curated test set;
+  the loader ignores folder names (rglob + filename parsing). Do not move the files.
 
-## Known confounds (each species was measured on its own day)
+## What the data show — conclusions that change how to work (numbers + sources: docs/research-status-2026-10.md)
+- The statistical unit is the TREE. Two trees of one species differ MORE than two species measured on the same
+  day, so no species-level claim is possible from these data; classify per sample from many spots, never per spectrum.
+- Each species was measured on its own day, so "which day" is a shortcut for "which species". Any species result
+  needs a leave-one-day-out or within-day check. The day effect is SMALLER than the species difference but
+  consistent; never write "day effect > species difference".
+- The silent-region control (1850–2700, no wood bands) matches or beats the fingerprint on every 9-class and
+  softwood/hardwood test; only within the 0925 Chamaecyparis pair does the fingerprint lead, by a small margin.
+  The control works at both spatial scales and survives baseline correction and derivatives. Report it next to
+  every number.
+- The export is vendor-processed and the 1600 lignin band is a dip: the bottleneck is acquisition, not the model
+  (none of 36 preprocessing × classifier combos clears its silent control by more than 0.10).
+
+## Measurement schedule (each species was measured on its own day)
 | date | species | power |
 |---|---|---|
 | 0918 | Acacia mangium | unrecorded |
@@ -58,37 +69,11 @@
 | 0923 | Acacia confusa, Fokienia (B1, B3 again, spots 11–15) | unrecorded |
 | 0925 | C. formosensis, C. obtusa var. formosana | 24 mW |
 | 0926 | S. mahagoni, S. macrophylla | 24 mW |
-- Session effect: on the same two Fokienia blocks, date is predictable on the held-out block
-  (balanced acc 0.93 fingerprint, 0.98 silent region; only 2 blocks, so weak evidence but consistent).
-- **Signal budget (experiments/03, RMS difference of group-mean SNV spectra, debiased; fingerprint / silent):**
-  tree vs tree same species same day 0.46 / 0.31 · species vs species same day 0.38 / 0.39 ·
-  single-spectrum noise 0.39 / 0.42 · block vs block same tree 0.20 / 0.31 · same wood, other day 0.17 / 0.33.
-  → Between-tree variation EXCEEDS the species difference (main reason held-out trees fail; needs more trees).
-  → The day effect is SMALLER than the species difference in magnitude (~half) but consistent, hence learnable;
-    with species nested in days it becomes a shortcut. Do NOT write "day effect > species difference".
-  → Single spectra are as noisy as the species difference: classify per sample from many spots, not per spectrum.
-  Tiny n behind each row (tree 2 pairs, species 3, day 2): read as orders of magnitude.
-- Silent region 1850–2700 predicts species as well as the fingerprint (LOBO 0.74 vs 0.73, chance 0.11) and
-  better on held-out Swietenia trees (0.84/0.84 vs 0.62/0.42). O-H region alone: LOBO 0.69.
-- Held-out-tree recall (9-class, fingerprint): C. obtusa var. formosana 0.33/0.33, S. macrophylla 0.62/0.42.
-- Inflation ladder (9-class PCA-LDA, fingerprint / silent): spot-level random 5-fold 0.91 / 0.93 →
-  LOBO 0.73 / 0.74 → held-out tree 0.43 / 0.60. Quote spot-level only as this demonstration.
-- The silent-region shortcut lives in NARROW structure (<120 cm-1 scale: LOBO 0.73, date 0.98), not in the
-  broad background (LOBO 0.52) → baseline correction or derivatives cannot remove it.
-- Method sweep (experiments/01, 6 preprocessings × 6 classifiers incl. RF/MLP, untuned): best within-day
-  held-out-tree recall 0.71 (SG1+SNV+RF) vs its silent control 0.69; max fingerprint−silent margin 0.10.
-  C. obtusa var. formosana tree 2 is never recognised (0.12–0.47 in all 36) — it looks like C. formosensis.
-  EPO from Fokienia session pairs removes the date signal but does not improve species generalisation.
-  Picking the best of 36 on 4 test trees is itself selection bias. With 4 held-out trees, even 4/4 has a
-  95% CI of [0.40, 1.00]: no method can make a species-level claim from this data.
-- **Unseen-day test (experiments/02):** softwood vs hardwood (chemically the easiest split), leave-one-DAY-out:
-  balanced acc fingerprint 0.37, silent 0.39, C-H 0.23, O-H 0.18 — BELOW chance 0.5 — vs 0.62–0.69 with
-  leave-one-tree-out. Whatever the models learn does not survive a new measurement day.
-- Known-band features (13 wood bands) do no better than the same features at random off-band fingerprint
-  positions (experiments/02). 0925 pair: fingerprint beats silent in 9/10 methods but by only ~0.06 on average.
-- Within-day pairs are the only species comparisons not confounded by session. Best evidence of chemistry:
-  0925 Chamaecyparis pair, LOBO fingerprint 0.73 > silent 0.58 > O-H 0.47 (chance 0.5) — but held-out tree
-  0.86 / 0.39. In the 0926 Swietenia pair, O-H (0.92) and silent (0.81) match or beat fingerprint (0.83).
+- Species–day aliasing: of the 36 species pairs, 4 share a measurement day, 1 is linked only through Fokienia
+  (0922 + 0923), 31 are fully aliased with the day [00, `species_pairs_vs_day`]. No algorithm can separate those
+  31 — LLMs, pretrained spectral encoders, synthetic spectra, literature band features (already failed, [02]),
+  SHAP/LIME (they show where a model looks, not why that region differs). Do NOT re-propose an algorithmic rescue
+  without data in which species and day vary independently. Reasoning: docs/research-status-2026-10.md.
 
 ## Evaluation contract (non-negotiable)
 1. Never report spot-level random K-fold. Every result states its split explicitly.
@@ -98,19 +83,22 @@
    statistics) is fitted inside the training fold — use sklearn Pipelines (`woodraman.preprocess`).
 4. Report balanced accuracy, macro-F1, per-class recall and the confusion matrix. Also report
    block-level accuracy (majority vote over a block's spectra) as the operational metric.
+   `woodraman.evaluate.classification_metrics(y, pred, groups=block_id)` returns all of these.
 5. Negative controls for every new pipeline, reported next to the main number:
    (a) within-day pair accuracy, (b) O-H-region-only, (c) **silent-region-only (1850–2700)**,
    (d) date prediction on Fokienia. If (b) or (c) is close to the main result, the pipeline is not
    measuring wood chemistry — say so in the write-up.
 6. Hyperparameters are tuned with nested group CV. No tuning on held-out trees.
 7. Compare every DL model against PCA-LDA / PLS-DA / linear SVM baselines under the same split.
-8. Seeds fixed; each run writes `results/<date>_<exp>/metrics.json` + config. No result
-   goes into a slide or paper unless it is reproducible from a committed script.
+8. Seeds fixed; each run writes `results/<date>_<exp>/metrics.json` + `config.json` (`woodraman.evaluate.write_run`).
+   No result goes into a slide, paper, the proposal or THIS FILE unless it is reproducible from a committed script.
+9. Metadata (date, power, tree, block, face) is never a model input. Date is used only as a split, a grouping,
+   a negative-control target, or to estimate a nuisance direction that is projected OUT (EPO, in-fold).
 
 ## Code layout
 - `src/woodraman/`: `io.py` (parsing + metadata), `preprocess.py` (Crop, SNV, SGDerivative, ASPLSBaseline,
   NuisanceProjector/EPO), `splits.py` (group splitters + `assert_no_leak`), `models.py` (PLS-DA + fixed
-  baseline classifiers). To add: EMSC, `evaluate.py`.
+  baseline classifiers), `evaluate.py` (contract metrics + run provenance). To add: EMSC.
 - `experiments/NN_<name>.py`: thin scripts importing `woodraman`; one question per script.
 - `notebooks/`: exploration only; move anything reusable into `src/`.
 - `results/`, `models/`: generated and git-ignored.
