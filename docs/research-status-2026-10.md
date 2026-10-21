@@ -126,3 +126,13 @@ p 大 = 真標籤跟亂貼沒差。來源 `experiments/02_generalisation_ladder.
   0.86 / 0.39. In the 0926 Swietenia pair, O-H (0.92) and silent (0.81) match or beat fingerprint (0.83).
   0922 C. obtusa vs Fokienia: 0.72 / 0.72 / 0.74. 0923 Acacia confusa vs Fokienia (the ONLY same-day softwood vs
   hardwood pair): fingerprint 0.91, silent 0.88, O-H 0.90 — separable, but not via bands. [00]
+- Model weights [05] (PCA-LDA; per point |w·(x − mean)|, which equals linear SHAP; ratio = weight share / share of
+  the axis, 1 = no preference; species / softwood-hardwood / Fokienia date / per-point SD baseline):
+  near wood bands 1.06 / 0.92 / 1.20 / 1.08; silent 1.07 / 1.16 / 0.89 / 0.94; vendor-anchor windows 955–980 +
+  2810–2832 1.89 / 2.89 / 1.07 / 1.59 (1.6% of the axis carries 3.0% / 4.6% of the species / softwood-hardwood
+  weight). Over the 34 LOBO refits the 10–90% ranges are ≤ 0.07 wide except non-band peaks for softwood-hardwood
+  (1.42–1.63) and the anchors (1.84–1.98 / 2.72–3.04); refits share 33/34 blocks, so this is fit stability, not
+  tree-level uncertainty. Top weights: species 2419 (silent), 1238, 1045, 2827 (anchor), 975 (anchor);
+  softwood-hardwood 1236, 2139 (silent), 973 (anchor), 1314, 2175 (silent). The species weights do NOT resemble the
+  date model's (Spearman 0.11) but follow where spectra vary (0.71): this cannot show "species model = date model".
+  INFERENCE: the vendor baseline leaves sample-dependent distortion at its anchors, and the models use it.

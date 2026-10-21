@@ -61,3 +61,17 @@ def test_write_run_writes_metrics_and_config(tmp_path):
     assert saved["script"] == "experiments/99_demo.py"
     assert saved["params"]["seed"] == 0
     assert {"git_commit", "git_dirty", "date", "versions"} <= saved.keys()
+
+
+def test_uncommitted_script_marks_run_dirty():
+    # a run is only reproducible from its commit if the script itself is committed and unmodified
+    from woodraman.io import REPO_ROOT
+
+    probe = REPO_ROOT / "experiments" / "_untracked_probe.py"
+    probe.write_text("# probe\n")
+    try:
+        cfg = run_config("experiments/_untracked_probe.py")
+    finally:
+        probe.unlink()
+    assert cfg["script_clean"] is False
+    assert cfg["git_dirty"] is True

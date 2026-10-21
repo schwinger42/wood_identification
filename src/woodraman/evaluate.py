@@ -60,14 +60,20 @@ def _git(*args: str) -> str:
 
 
 def run_config(script: str, **params) -> dict:
-    """Provenance of one run: script, commit (and whether the tree was dirty), date, versions, parameters."""
+    """Provenance of one run: script, commit, date, versions, parameters.
+
+    `script_clean` is False when the script itself is untracked or modified; `git_dirty` is True when any tracked
+    file is modified OR the script is not clean (an uncommitted script cannot be reproduced from `git_commit`).
+    """
     import scipy
     import sklearn
 
+    script_clean = not _git("status", "--porcelain", "--untracked-files=all", "--", script)
     return {
         "script": script,
         "git_commit": _git("rev-parse", "HEAD"),
-        "git_dirty": bool(_git("status", "--porcelain", "--untracked-files=no")),
+        "script_clean": script_clean,
+        "git_dirty": bool(_git("status", "--porcelain", "--untracked-files=no")) or not script_clean,
         "date": datetime.now().isoformat(timespec="seconds"),
         "versions": {
             "python": platform.python_version(),

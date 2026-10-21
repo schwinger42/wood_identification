@@ -18,6 +18,8 @@
 - Signal budget (how big each source of spectral difference is): `uv run python experiments/03_signal_budget.py` (~1 s)
 - Shared instrument pattern (peaks, day stability, amplitude-only, broad vs narrow scale):
   `uv run python experiments/04_shared_pattern.py` (~15 s)
+- Where linear models put their weight (replaces SHAP/LIME for linear models; paper figure):
+  `uv run python experiments/05_model_weights.py` (~35 s)
 - Timings are with `OMP_NUM_THREADS=8 LOKY_MAX_CPU_COUNT=8` (2026-10-22). Set these when running scripts in parallel:
   uncapped BLAS threads in 4 parallel runs drove load to ~96 on 32 cores and made a 45 s script take 15+ min.
 - Every script writes `results/<YYYYMMDD>_<exp>/metrics.json` + `config.json` (commit, dirty flag, versions,
@@ -59,6 +61,9 @@ Rule: a number enters this file only with the script that reproduces it. No sour
   every number.
 - The export is vendor-processed and the 1600 lignin band is a dip: the bottleneck is acquisition, not the model
   (none of 36 preprocessing × classifier combos clears its silent control by more than 0.10).
+- Linear models do not concentrate weight on known wood bands; the softwood/hardwood model under-weights them and
+  over-weights the vendor-baseline anchor windows (955–980, 2810–2832) [05]. Another reason the raw re-export
+  (before vendor baseline) is the first ask.
 
 ## Measurement schedule (each species was measured on its own day)
 | date | species | power |
