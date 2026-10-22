@@ -7,6 +7,7 @@ Proof of concept with Prof. Tsao (NCHU): identify Taiwanese timber species from 
 uv sync                                          # Python 3.12 env from uv.lock
 uv run pytest                                    # parsing + leak-free splitters
 uv run python experiments/00_confound_audit.py   # confound audit -> results/<date>_00_confound_audit/
+uv run python figures/proposal_figures.py        # proposal figures from the latest 00/02/03 results
 ```
 
 - `CLAUDE.md` — data facts, evaluation contract, research direction (read this first).

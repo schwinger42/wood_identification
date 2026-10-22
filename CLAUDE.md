@@ -20,6 +20,8 @@
   `uv run python experiments/04_shared_pattern.py` (~15 s)
 - Where linear models put their weight (replaces SHAP/LIME for linear models; paper figure):
   `uv run python experiments/05_model_weights.py` (~35 s)
+- Proposal figures (zh-TW) from the latest results of 00/02/03; refuses stale or dirty results, checks layout:
+  `uv run python figures/proposal_figures.py` (~10 s) → `results/<date>_proposal_figures/`
 - Timings are with `OMP_NUM_THREADS=8 LOKY_MAX_CPU_COUNT=8` (2026-10-22). Set these when running scripts in parallel:
   uncapped BLAS threads in 4 parallel runs drove load to ~96 on 32 cores and made a 45 s script take 15+ min.
 - Every script writes `results/<YYYYMMDD>_<exp>/metrics.json` + `config.json` (commit, dirty flag, versions,
@@ -105,6 +107,7 @@ Rule: a number enters this file only with the script that reproduces it. No sour
   NuisanceProjector/EPO), `splits.py` (group splitters + `assert_no_leak`), `models.py` (PLS-DA + fixed
   baseline classifiers), `evaluate.py` (contract metrics + run provenance). To add: EMSC.
 - `experiments/NN_<name>.py`: thin scripts importing `woodraman`; one question per script.
+- `figures/`: figure scripts that only READ committed experiment results; they never recompute numbers.
 - `notebooks/`: exploration only; move anything reusable into `src/`.
 - `results/`, `models/`: generated and git-ignored.
 - `docs/`: `research-status-2026-10.md` (current state, read first), `literature-2026-10.md`,
