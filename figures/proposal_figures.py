@@ -3,8 +3,8 @@
     uv run python figures/proposal_figures.py
 
 Reads results/<date>_00/02/03_*/metrics.json + CSVs (run those experiments first); recomputes nothing, so every
-number in a figure is the number the experiment wrote. Refuses results produced by a dirty tree or a different
-commit than HEAD. Every figure passes a layout check (no overlapping text, nothing outside the canvas) before saving.
+number in a figure is the number the experiment wrote. Refuses results from a dirty tree, or whose experiment
+script, `woodraman` package or raw data changed since they were produced. Every figure passes a layout check (no overlapping text, nothing outside the canvas) before saving.
 Writes results/<YYYYMMDD>_proposal_figures/{fig1_ladder, fig2_signal_budget, fig3_same_day}.{png,svg} + config.json.
 """
 
@@ -43,18 +43,24 @@ ZH = {  # in measurement-date order
 }
 
 
+def changed_since(commit: str, exp: str) -> list[str]:
+    """Files that determine an experiment's numbers and changed between `commit` and HEAD."""
+    paths = [f"experiments/{exp}.py", "src/woodraman", "dataset/raw"]
+    return _git("diff", "--name-only", commit, "HEAD", "--", *paths).split()
+
+
 def latest(exp: str) -> Path:
-    """Newest results/<date>_<exp> directory whose config says: this commit, clean tree."""
+    """Newest results/<date>_<exp> made from a clean tree, with no change since to its script, package or data."""
     dirs = sorted((REPO_ROOT / "results").glob(f"*_{exp}"))
     if not dirs:
         raise FileNotFoundError(f"No results for {exp}; run experiments/{exp}.py first")
     d = dirs[-1]
     cfg = json.loads((d / "config.json").read_text())
-    head = _git("rev-parse", "HEAD")
-    if cfg["git_dirty"] or cfg["git_commit"] != head:
+    stale = changed_since(cfg["git_commit"], exp)
+    if cfg["git_dirty"] or stale:
         raise RuntimeError(
-            f"{d.name} was produced by {cfg['git_commit'][:7]} (dirty={cfg['git_dirty']}), "
-            f"HEAD is {head[:7]}: re-run experiments/{exp}.py"
+            f"{d.name} (commit {cfg['git_commit'][:7]}, dirty={cfg['git_dirty']}) is stale: "
+            f"changed since: {stale[:5]}; re-run experiments/{exp}.py"
         )
     return d
 
