@@ -5,7 +5,7 @@
 
 ## 一句話
 現有 1,050 條光譜（9 樹種、11 株）在嚴格驗證下不能辨識樹種，連針葉 vs 闊葉也不行（留一整天：0.37，亂猜 0.5）。
-主因依序：株數不足（同種不同株差異 0.46 > 不同樹種 0.38）、量測設計（樹種與量測日綁定）、儀器與匯出（背景起伏與訊號同級）。
+主因依序：株數不足（兩組同屬同日比較中，同種兩株差異 0.42、0.46 > 兩樹種 0.15、0.35）、量測設計（樹種與量測日綁定）、儀器與匯出（背景起伏與訊號同級）。
 
 ## 能辨識什麼（主結果 = fingerprint 400–1800；對照 = 無化學波段 silent 1850–2700）
 | 問題 | 驗證 | 結果 | 對照 | 亂猜 |
@@ -22,28 +22,32 @@
 亂貼標籤 p：把「針葉」標籤隨機貼到 9 種中的任 4 種（126 種貼法，PCA-LDA、SNV），分數不輸真標籤的比例；
 p 大 = 真標籤跟亂貼沒差。來源 `experiments/02_generalisation_ladder.py`。
 
-## 訊號預算（experiments/03；fingerprint / silent）
-| 比較 | fingerprint | silent |
-|---|---|---|
-| 同種不同株（同日） | 0.46 | 0.31 |
-| 單條光譜雜訊 | 0.39 | 0.42 |
-| 不同樹種（同日） | 0.38 | 0.39 |
-| 同株不同試塊 | 0.20 | 0.31 |
-| 同一木塊換一天 | 0.17 | 0.33 |
+## 訊號預算（experiments/03；fingerprint / silent；括號為各組最小–最大）
+2026-10-22 依 Codex 審查修正：以試塊（或切面）平均再扣抽樣誤差、雜訊只在同一切面內算、補上 0923 那組。
+| 比較 | 組數 | fingerprint | silent |
+|---|---|---|---|
+| 同種不同株（同日） | 2 | 0.44（0.42–0.46） | 0.24（0.22–0.27） |
+| 單條光譜雜訊（同一切面內） | — | 0.35 | 0.38 |
+| 不同樹種（同日） | 4 | 0.33（0.15–0.53） | 0.34（0.20–0.42） |
+| 同株不同試塊 | 38 | 0.16（0.00–0.42） | 0.28（0.00–0.65） |
+| 同一木塊換一天 | 2 | 0.13（0.08–0.17） | 0.31（0.30–0.32） |
+同屬同日的直接比較（fingerprint）：臺灣扁柏兩株 0.42 vs 紅檜–臺灣扁柏 0.15；大葉桃花心木兩株 0.46 vs 兩種桃花心木 0.35。
+各列組數極少，只能說「這幾組比較」如此，不能推廣成所有樹種的大小關係。
 
 ## 已更正的說法
-- 「量測日差異比樹種差異大」是錯的：fingerprint 約為一半（0.17 vs 0.38；silent 兩者接近，0.33 vs 0.39），
+- 「量測日差異比樹種差異大」是錯的：fingerprint 0.13 vs 0.33（silent 兩者接近，0.31 vs 0.34），
   但很一致、可被學習，且與樹種綁定 → 成為捷徑。
 - 「水訊號是主因」沒有證據；含水率較可能經由螢光影響背景。
 - 「無化學波段的捷徑只在細結構、寬背景只有 0.52」重現不出來（2026-10-22，`04`）：用 61/121/241 cm⁻¹ 三種寬度切開，
   寬背景 LOBO 0.68–0.71、細結構 0.71–0.75（亂猜 0.11），兩種尺度都帶捷徑。扣背景或取導數也去不掉（`01`）。
 
 ## 現有資料還能救什麼（2026-10-22 結論）
-- **9 樹種辨識：救不回來，換任何演算法都一樣。** 三個天花板，都不是模型問題：
+- **9 樹種辨識：不加入本資料無法檢驗的假設（例如「每天的偏移對所有樹種都一樣」），現有資料不能支持跨日期的
+  9 樹種辨識，換任何演算法都一樣。** 同日的 4 組仍可做「這幾棵樹」的探索性比較。三個天花板，都不是模型問題：
   1. 樹種與量測日綁死：36 組樹種對中，只有 4 組同一天量、1 組只能經福建柏（9/22、9/23 都量過）間接比，
      31 組的差異和量測日完全綁死（`00` 的 `species_pairs_vs_day`）。像 A 配方全在週一 1 號機台、B 配方全在週二
      2 號機台：再好的分析也分不出差異來自配方還是機台。
-  2. 同種不同株差異 0.46 > 不同樹種 0.38（`03`）：要更多棵樹，模型變不出來。
+  2. 兩組同屬同日比較中，同種兩株差異（0.42、0.46）都大於兩樹種差異（0.15、0.35）（`03`）：要更多棵樹，模型變不出來。
   3. 驗證天花板：換一棵樹只能測 4 棵；4 棵全對，判對率的 95% 下界也只有 0.40。
 - **已評估、救不了的演算法路線（沒有新資料前不要重提）：**
   - LLM 直接分類光譜：不增加資訊，同樣綁死。兩次網路搜尋沒找到 LLM 做 Raman 分類的研究（非系統性回顧）。
@@ -88,12 +92,15 @@ p 大 = 真標籤跟亂貼沒差。來源 `experiments/02_generalisation_ladder.
   +12.1, +17.3 cm-1): no consistent axis offset. [04]
 - Session effect: on the same two Fokienia blocks, date is predictable on the held-out block
   (balanced acc 0.93 fingerprint, 0.98 silent region; only 2 blocks, so weak evidence but consistent). [00]
-- **Signal budget (experiments/03, RMS difference of group-mean SNV spectra, debiased; fingerprint / silent):**
-  tree vs tree same species same day 0.46 / 0.31 · species vs species same day 0.38 / 0.39 ·
-  single-spectrum noise 0.39 / 0.42 · block vs block same tree 0.20 / 0.31 · same wood, other day 0.17 / 0.33.
+- **Signal budget (experiments/03, RMS difference of group-mean SNV spectra, debiased with block/face-level
+  variance since 2026-10-22; fingerprint / silent; per-pair values in pairs.csv):**
+  tree vs tree same species same day 0.44 / 0.24 (2 pairs) · species vs species same day 0.33 / 0.34 (4 pairs,
+  fingerprint range 0.15–0.53) · single-spectrum noise within face 0.35 / 0.38 · block vs block same tree
+  0.16 / 0.28 · same wood, other day 0.13 / 0.31. Same genus, same day: two trees 0.42 / 0.46 vs two species
+  0.15 / 0.35 (Chamaecyparis / Swietenia).
   → Between-tree variation EXCEEDS the species difference (main reason held-out trees fail; needs more trees).
-  → The day effect is SMALLER than the species difference in magnitude (~half in the fingerprint, 0.17 vs 0.38;
-    in the silent region they are close, 0.33 vs 0.39) but consistent, hence learnable;
+  → The day effect is SMALLER than the species difference in the fingerprint (0.13 vs 0.33; in the silent region
+    they are close, 0.31 vs 0.34) but consistent, hence learnable;
     with species nested in days it becomes a shortcut. Do NOT write "day effect > species difference".
   → Single spectra are as noisy as the species difference: classify per sample from many spots, not per spectrum.
   Tiny n behind each row (tree 2 pairs, species 3, day 2): read as orders of magnitude.

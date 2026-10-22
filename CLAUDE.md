@@ -52,8 +52,9 @@ Rule: a number enters this file only with the script that reproduces it. No sour
   the loader ignores folder names (rglob + filename parsing). Do not move the files.
 
 ## What the data show — conclusions that change how to work (numbers + sources: docs/research-status-2026-10.md)
-- The statistical unit is the TREE. Two trees of one species differ MORE than two species measured on the same
-  day, so no species-level claim is possible from these data; classify per sample from many spots, never per spectrum.
+- The statistical unit is the TREE. In both same-genus, same-day comparisons, the two trees of one species differ
+  MORE than the two species do (exploratory: 2 comparisons, [03]), so no species-level claim is possible from these
+  data; classify per sample from many spots, never per spectrum.
 - Each species was measured on its own day, so "which day" is a shortcut for "which species". Any species result
   needs a leave-one-day-out or within-day check. The day effect is SMALLER than the species difference but
   consistent; never write "day effect > species difference".
@@ -77,8 +78,9 @@ Rule: a number enters this file only with the script that reproduces it. No sour
 | 0925 | C. formosensis, C. obtusa var. formosana | 24 mW |
 | 0926 | S. mahagoni, S. macrophylla | 24 mW |
 - Species–day aliasing: of the 36 species pairs, 4 share a measurement day, 1 is linked only through Fokienia
-  (0922 + 0923), 31 are fully aliased with the day [00, `species_pairs_vs_day`]. No algorithm can separate those
-  31 — LLMs, pretrained spectral encoders, synthetic spectra, literature band features (already failed, [02]),
+  (0922 + 0923), 31 are fully aliased with the day [00, `species_pairs_vs_day`]. Without assumptions these data
+  cannot test (e.g. that a day shifts every species identically), those 31 cannot be separated by any algorithm —
+  LLMs, pretrained spectral encoders, synthetic spectra, literature band features (already failed, [02]),
   SHAP/LIME (they show where a model looks, not why that region differs). Do NOT re-propose an algorithmic rescue
   without data in which species and day vary independently. Reasoning: docs/research-status-2026-10.md.
 
