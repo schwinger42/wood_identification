@@ -170,37 +170,51 @@ def fig1_ladder(d02: Path):
 
 
 def fig2_budget(d03: Path):
-    raw = pd.read_csv(d03 / "signal_budget.csv")
-    b = raw.pivot(index="effect", columns="region", values="value")
-    n = raw.groupby("effect").n_pairs.first()
+    sb = pd.read_csv(d03 / "signal_budget.csv").set_index(["effect", "region"])
     order = [
-        ("tree vs tree (same species, same day)", "同一樹種、不同棵（同一天）"),
-        ("spot noise (single spectrum)", "單條光譜本身的雜訊"),
-        ("species vs species (same day)", "不同樹種（同一天）"),
-        ("block vs block (same tree, same day)", "同一棵、不同試塊"),
-        ("day vs day (same wood blocks)", "同一試塊、換一天量"),
+        ("tree vs tree", "同一樹種、不同棵（同一天）"),
+        ("spot noise", "單條光譜本身的雜訊（同一切面內）"),
+        ("species vs species", "不同樹種（同一天）"),
+        ("block vs block", "同一棵、不同試塊"),
+        ("day vs day", "同一試塊、換一天量"),
     ]
-    fig, ax = plt.subplots(figsize=(10, 4.4))
+    fig, ax = plt.subplots(figsize=(10, 4.6))
     h = 0.36
     for i, (key, _) in enumerate(order):
         y = len(order) - 1 - i
-        for dy, col, val in ((h / 2, CHEM, b.loc[key, "fingerprint"]), (-h / 2, CTRL, b.loc[key, "silent"])):
-            ax.barh(y + dy, val, height=h * 0.9, color=col)
-            ax.text(val + 0.006, y + dy, f"{val:.2f}", va="center", fontsize=8.5)
-    labels = [f"{lab} · {n[key]} 組" for key, lab in order][::-1]
-    ax.set_yticks(range(len(order)), labels, fontsize=10)
+        for dy, col, reg in ((h / 2, CHEM, "fingerprint"), (-h / 2, CTRL, "silent")):
+            r = sb.loc[(key, reg)]
+            ax.barh(y + dy, r.value, height=h * 0.9, color=col)
+            if r.n_pairs > 1:  # range over the compared pairs: the mean hides a wide spread
+                ax.plot([r["min"], r["max"]], [y + dy, y + dy], color="#222", lw=1)
+            ax.text(max(r.value, r["max"]) + 0.008, y + dy, f"{r.value:.2f}", va="center", fontsize=8.5)
+    labels = []
+    for key, lab in order:
+        n = int(sb.loc[(key, "fingerprint")].n_pairs)
+        labels.append(lab if key == "spot noise" else f"{lab} · {n} 組")
+    ax.set_yticks(range(len(order)), labels[::-1], fontsize=10)
     ax.get_yticklabels()[2].set_fontweight("bold")  # the species row: the signal we need
-    ax.set_xlim(0, 0.55)
-    ax.set_xlabel("兩組平均光譜的差異（均方根，單位：一條光譜自身起伏的標準差；已扣抽樣誤差）")
+    ax.set_xlim(0, 0.72)
+    ax.set_xlabel(
+        "兩組平均光譜的差異（均方根，單位：一條光譜自身起伏的標準差；以試塊或切面為單位扣除抽樣誤差）"
+    )
     ax.spines[["top", "right"]].set_visible(False)
-    handles = [Patch(color=CHEM, label="化學波段"), Patch(color=CTRL, label="對照波段（無木材化學峰）")]
+    handles = [
+        Patch(color=CHEM, label="化學波段"),
+        Patch(color=CTRL, label="對照波段（無木材化學峰）"),
+        Line2D([], [], color="#222", lw=1, label="各組最小–最大"),
+    ]
     ax.legend(
-        handles=handles, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2, frameon=False, fontsize=9
+        handles=handles, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3, frameon=False, fontsize=9
     )
     fig.text(
-        0.01, 0.01, "組數少（最少 2 組），只能當量級看。資料：experiments/03。", fontsize=8, color="#555"
+        0.01,
+        0.01,
+        "長條為各組平均；組數少（最少 2 組），只能當量級看。資料：experiments/03。",
+        fontsize=8,
+        color="#555",
     )
-    fig.subplots_adjust(left=0.27, right=0.97, top=0.88, bottom=0.2)
+    fig.subplots_adjust(left=0.29, right=0.97, top=0.88, bottom=0.2)
     return fig
 
 
